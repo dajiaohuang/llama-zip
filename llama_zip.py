@@ -305,8 +305,6 @@ class LlamaZip:
         token_encoder = Encoder()
 
         interrupted = False
-        s = signal.signal(signal.SIGINT, sigint_handler)
-
         progress_bar = tqdm(
             total=len(tokens),
             mininterval=1 / 30,
@@ -317,24 +315,25 @@ class LlamaZip:
             disable=not self.verbose,
         )
 
-        while next_token_idx < len(tokens):
-            start_idx = max(0, next_token_idx - window_overlap)
-            consume(
-                self.model.generate(
-                    tokens=[self.model.token_bos()] + tokens[start_idx:next_token_idx],
-                    temp=0.0,
-                    logits_processor=[process_logits],
-                    stopping_criteria=should_stop,
+        s = signal.signal(signal.SIGINT, sigint_handler)
+        try:
+            while next_token_idx < len(tokens):
+                start_idx = max(0, next_token_idx - window_overlap)
+                consume(
+                    self.model.generate(
+                        tokens=[self.model.token_bos()] + tokens[start_idx:next_token_idx],
+                        temp=0.0,
+                        logits_processor=[process_logits],
+                        stopping_criteria=should_stop,
+                    )
                 )
-            )
-        progress_bar.close()
-
-        token_encoder.finish()
-        compressed = token_encoder.get_encoded()
-
-        signal.signal(signal.SIGINT, s)
-
-        return compressed
+            token_encoder.finish()
+            return token_encoder.get_encoded()
+        finally:
+            try:
+                progress_bar.close()
+            finally:
+                signal.signal(signal.SIGINT, s)
 
     def tokenizer_adds_space_prefix(self):
         space = b" "
